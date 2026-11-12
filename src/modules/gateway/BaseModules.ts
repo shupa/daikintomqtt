@@ -459,12 +459,14 @@ async function validateData(device: DaikinCloudDevice, def: ModulePropertyMetada
 		const deviceId = device.getId();
 		logger.debug(`[BaseModules.ts] => validateData called for ${deviceId} - ${def.managementPoint}/${def.dataPoint}, input value: ${value} (type: ${typeof value})`);
 		
-		// Get device from cache to ensure we have the latest state
-		const deviceD = await cache.get(`device_${deviceId}`) as DaikinCloudDevice | undefined;
-		
+		// The individual snapshot can expire during a prolonged API-budget block,
+		// while the command still carries a device from the known device list.
+		// Recover locally rather than dropping the heating command or spending an API call.
+		let deviceD = await cache.get(`device_${deviceId}`) as DaikinCloudDevice | undefined;
 		if (!deviceD) {
-			logger.error(`[BaseModules.ts] => Device ${deviceId} not found in cache`);
-			return false;
+			logger.warn(`[BaseModules.ts] => Device ${deviceId} missing from individual cache; restoring from known device list`);
+			deviceD = device;
+			await cache.set(`device_${deviceId}`, deviceD, DEVICE_CACHE_TTL_MS);
 		}
 		
 		// Use deviceD (from cache) to get params, as it has the latest state after previous updates
@@ -572,12 +574,14 @@ async function validateDataPath(device: DaikinCloudDevice, def: ModulePropertyMe
 	try {
 		const deviceId = device.getId();
 		
-		// Get device from cache to ensure we have the latest state
-		const deviceD = await cache.get(`device_${deviceId}`) as DaikinCloudDevice | undefined;
-		
+		// The individual snapshot can expire during a prolonged API-budget block,
+		// while the command still carries a device from the known device list.
+		// Recover locally rather than dropping the heating command or spending an API call.
+		let deviceD = await cache.get(`device_${deviceId}`) as DaikinCloudDevice | undefined;
 		if (!deviceD) {
-			logger.error(`[BaseModules.ts] => Device ${deviceId} not found in cache`);
-			return false;
+			logger.warn(`[BaseModules.ts] => Device ${deviceId} missing from individual cache; restoring from known device list`);
+			deviceD = device;
+			await cache.set(`device_${deviceId}`, deviceD, DEVICE_CACHE_TTL_MS);
 		}
 		
 		// Use deviceD (from cache) to get params, as it has the latest state after previous updates
