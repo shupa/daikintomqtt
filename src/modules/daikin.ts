@@ -622,7 +622,7 @@ async function sendDevice(
 			const deviceId = dev.getId();
 			try {
 				// Use cache.set() instead of direct indexing
-				// TTL of 3 hours to match the device list cache
+				// Use the same resilient TTL as the device list
 				await cache.set(`device_${deviceId}`, dev, DEVICE_CACHE_TTL_MS);
 				
 				let gateway = getModels(dev);
@@ -952,19 +952,26 @@ async function getDevices(force: boolean = false, reason: string = "unspecified"
 					logger.info(`[daikin.ts] => Energy stats refresh: ${electricalCount}/${freshDevices.length} device(s) with electrical data`);
 				}
 				
-				// Cache with TTL of 3 hours (10800000 milliseconds)
+				// Keep the last-known list across daily API-budget windows
 				await cache.set('devices', freshDevices, DEVICE_CACHE_TTL_MS);
 				
-				// Invalidate individual device caches to ensure consistency
-				if (devices && devices.length) {
-					logger.debug(`[daikin.ts] => Invalidating cache for ${devices.length} previous device(s)`);
-					for (const dev of devices) {
-						await cache.del(`device_${dev.getId()}`);
-						gatewayCache.delete(dev.getId());
-					}
+				// Replace per-device snapshots before removing obsolete entries.
+				// Commands can arrive while polling is running: deleting all entries first
+				// creates a window in which validateData() rejects valid devices.
+				for (const dev of freshDevices) {
+					await cache.set(`device_${dev.getId()}`, dev, DEVICE_CACHE_TTL_MS);
+					gatewayCache.delete(dev.getId());
 				}
 
 				const freshIds = new Set(freshDevices.map((d) => d.getId()));
+				if (devices && devices.length) {
+					for (const dev of devices) {
+						if (!freshIds.has(dev.getId())) {
+							await cache.del(`device_${dev.getId()}`);
+							gatewayCache.delete(dev.getId());
+						}
+					}
+				}
 				for (const cachedId of gatewayCache.keys()) {
 					if (!freshIds.has(cachedId)) {
 						gatewayCache.delete(cachedId);
