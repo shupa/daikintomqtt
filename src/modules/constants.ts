@@ -30,8 +30,10 @@ function readAppVersion(): string {
 
 export const APP_VERSION = readAppVersion();
 
-/** Device list cache TTL: 3 hours in milliseconds */
-export const DEVICE_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+/** Keep last-known devices across a full day of API-budget exhaustion.
+ * Refreshes overwrite these snapshots; command handlers may use them as a fallback.
+ */
+export const DEVICE_CACHE_TTL_MS = 48 * 60 * 60 * 1000;
 
 /** WebSocket post-action confirmation window: 120 seconds in milliseconds */
 export const WS_CONFIRMATION_TTL_MS = 120 * 1000;
